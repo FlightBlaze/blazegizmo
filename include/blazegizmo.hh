@@ -39,6 +39,12 @@ struct Ray {
     glm::vec3 direction;
 };
 
+struct Transform {
+    glm::vec3 translation;
+    glm::quat rotation = glm::quat(glm::vec3(0.0f));
+    glm::vec3 scale;
+};
+
 struct GizmoState {
     Control selectedControl = Control::None;
     Control controlOverMouse = Control::None;
@@ -67,9 +73,8 @@ struct GizmoProperties {
 };
 
 void drawGizmos(bvg::Context& ctx, GizmoState& state, GizmoTool tool,
-                GizmoProperties& props,
-                glm::mat4 viewproj, glm::mat4& model,
-                glm::vec3 eye, glm::vec3 target, glm::vec3 up,
+                GizmoProperties& props, Transform& transform,
+                glm::mat4 viewproj, glm::vec3 eye, glm::vec3 target, glm::vec3 up,
                 bool isMouseDown, float mouseX, float mouseY);
 
 } // namespace gizmo

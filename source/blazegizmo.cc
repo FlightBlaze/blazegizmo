@@ -321,7 +321,7 @@ void drawGizmoOrbitBins(bvg::Context& ctx, glm::mat4& viewproj,
     ctx.strokeStyle = bvg::SolidColor(color);
     ctx.lineWidth = lineWidth;
     std::vector<glm::vec3> vertices = createCircle(bins + 1);
-    for(int i = 0; i < vertices.size(); i++) {
+    for(int i = 0; i < vertices.size() - 1; i++) {
         glm::vec3 vertex = vertices.at(i);
         glm::vec3 center = model * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
         glm::vec3 centerForward = model * glm::vec4(vertex, 1.0f);
@@ -560,7 +560,7 @@ public:
     Drawing();
     
     virtual void draw(bvg::Context& ctx, GizmoState& state);
-    virtual bool mouseEvent(bvg::Context& ctx, GizmoState& state, glm::mat4& model,
+    virtual bool mouseEvent(bvg::Context& ctx, GizmoState& state, Transform& transform,
                             bool isMouseDown, float mouseX, float mouseY);
     
     DrawingType type = DrawingType::Other;
@@ -575,7 +575,7 @@ void Drawing::draw(bvg::Context& ctx, GizmoState& state)
 {
 }
 
-bool Drawing::mouseEvent(bvg::Context& ctx, GizmoState& state, glm::mat4& model,
+bool Drawing::mouseEvent(bvg::Context& ctx, GizmoState& state, Transform& transform,
                          bool isMouseDown, float mouseX, float mouseY) {
     return false;
 }
@@ -636,7 +636,7 @@ public:
     bool forScaling;
     
     void draw(bvg::Context& ctx, GizmoState& state);
-    bool mouseEvent(bvg::Context& ctx, GizmoState& state, glm::mat4& model,
+    bool mouseEvent(bvg::Context& ctx, GizmoState& state, Transform& transform,
                     bool isMouseDown, float mouseX, float mouseY);
 };
 
@@ -681,7 +681,7 @@ glm::vec3 projectMouseOnLine(bvg::Context& ctx, glm::vec3 mouse, glm::mat4& view
                                    lineOrigin + lineDir * 1000.0f);
 }
 
-bool ArrowDrawing::mouseEvent(bvg::Context& ctx, GizmoState& state, glm::mat4& model,
+bool ArrowDrawing::mouseEvent(bvg::Context& ctx, GizmoState& state, Transform& transform,
                               bool isMouseDown, float mouseX, float mouseY)
 {
     float z = worldToScreenSpace(ctx, origin, viewproj).z;
@@ -694,8 +694,8 @@ bool ArrowDrawing::mouseEvent(bvg::Context& ctx, GizmoState& state, glm::mat4& m
        state.axis == axis) {
         glm::vec3 differenceOld = state.offset - state.translation;
         glm::vec3 differenceNew = projectedPoint - state.translation;
-        model = glm::translate(differenceNew) *
-            glm::translate(-differenceOld) * model;
+        transform.translation -= differenceOld;
+        transform.translation += differenceNew;
         state.offset = projectedPoint;
     }
     
@@ -725,7 +725,7 @@ public:
     bvg::Color color;
     
     void draw(bvg::Context& ctx, GizmoState& state);
-    bool mouseEvent(bvg::Context& ctx, GizmoState& state, glm::mat4& model,
+    bool mouseEvent(bvg::Context& ctx, GizmoState& state, Transform& transform,
                     bool isMouseDown, float mouseX, float mouseY);
 };
 
@@ -756,12 +756,11 @@ glm::vec3 mouseAsWorldPoint(bvg::Context& ctx, GizmoState& state, glm::mat4& vie
     return screenToWorldSpace(ctx, glm::vec3(mouseX, mouseY, state.z), viewproj);
 }
 
-bool CenterDrawing::mouseEvent(bvg::Context& ctx, GizmoState& state, glm::mat4& model,
+bool CenterDrawing::mouseEvent(bvg::Context& ctx, GizmoState& state, Transform& transform,
                                bool isMouseDown, float mouseX, float mouseY) {
     if(state.selectedControl == Control::Center) {
-        model = glm::translate(mouseAsWorldPoint(ctx, state, viewproj, mouseX, mouseY) +
-                               state.offset) *
-                glm::translate(-state.translation) * model;
+        transform.translation = mouseAsWorldPoint(ctx, state, viewproj, mouseX, mouseY) +
+                               state.offset;
     }
     
     if(isMouseOverGizmoCenter(ctx, viewproj, center, glm::vec2(mouseX, mouseY))) {
@@ -794,7 +793,7 @@ public:
     Axis axis;
     
     void draw(bvg::Context& ctx, GizmoState& state);
-    bool mouseEvent(bvg::Context& ctx, GizmoState& state, glm::mat4& model,
+    bool mouseEvent(bvg::Context& ctx, GizmoState& state, Transform& transform,
                     bool isMouseDown, float mouseX, float mouseY);
 };
 
@@ -931,8 +930,8 @@ void OrbitDrawing::draw(bvg::Context& ctx, GizmoState& state) {
 }
 
 bool OrbitDrawing::mouseEvent(bvg::Context& ctx, GizmoState& state,
-                                         glm::mat4& model, bool isMouseDown,
-                                         float mouseX, float mouseY) {
+                              Transform& transform, bool isMouseDown,
+                              float mouseX, float mouseY) {
     glm::vec3 center = this->model * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
     glm::vec3 centerUp = this->model * glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
     glm::vec2 centerS = worldToScreenSpace(ctx, center, viewproj);
@@ -972,14 +971,12 @@ bool OrbitDrawing::mouseEvent(bvg::Context& ctx, GizmoState& state,
         } else {
             newArc = orientedArc + orientedRelativeAngle;
         }
-        model =
-            glm::translate(state.translation) *
-            glm::toMat4(state.rotation) *
-            glm::rotate(newArc, basis) *
-            glm::rotate(-state.rotatedAngle, basis) *
-            glm::toMat4(glm::inverse(state.rotation)) *
-            glm::translate(-state.translation) *
-            model;
+        
+        transform.rotation =
+            transform.rotation *
+            glm::angleAxis(newArc, basis) *
+            glm::angleAxis(-state.rotatedAngle, basis);
+        
         state.angle = angle;
         state.rotatedAngle = newArc;
         state.piePoint = projectScreenPointOnPlane(ctx, mouse, viewproj, center, up);
@@ -1017,7 +1014,7 @@ public:
     
     void draw(bvg::Context& ctx, GizmoState& state);
     bool mouseEvent(bvg::Context& ctx, GizmoState& state,
-                    glm::mat4& model, bool isMouseDown,
+                    Transform& transform, bool isMouseDown,
                     float mouseX, float mouseY);
 };
 
@@ -1041,7 +1038,7 @@ void ArcballDrawing::draw(bvg::Context& ctx, GizmoState& state) {
 }
 
 bool ArcballDrawing::mouseEvent(bvg::Context& ctx, GizmoState& state,
-                                glm::mat4& model, bool isMouseDown,
+                                Transform& transform, bool isMouseDown,
                                 float mouseX, float mouseY) {
     glm::vec2 mouse = glm::vec2(mouseX, mouseY);
     glm::vec2 lastMouse = glm::vec2(state.lastMouseX, state.lastMouseY);
@@ -1051,12 +1048,10 @@ bool ArcballDrawing::mouseEvent(bvg::Context& ctx, GizmoState& state,
     const float sensitivity = 1.0f / M_PI * 2.0f / revolutionPx;
     
     if(state.selectedControl == Control::Arcball) {
-        model =
-            glm::translate(state.translation) *
-            glm::rotate(relMouse.x * sensitivity, state.viewUp) *
-            glm::rotate(-relMouse.y * sensitivity, state.viewRight) *
-            glm::translate(-state.translation) *
-            model;
+        transform.rotation =
+            glm::angleAxis(relMouse.x * sensitivity, state.viewUp) *
+            glm::angleAxis(-relMouse.y * sensitivity, state.viewRight) *
+            transform.rotation;
     }
     
     if(isMouseOverGizmoArcball(ctx, center, viewproj, radius, eye, mouse)) {
@@ -1083,7 +1078,7 @@ public:
     glm::vec3 eye;
     
     void draw(bvg::Context& ctx, GizmoState& state);
-    bool mouseEvent(bvg::Context& ctx, GizmoState& state, glm::mat4& model,
+    bool mouseEvent(bvg::Context& ctx, GizmoState& state, Transform& transform,
                     bool isMouseDown, float mouseX, float mouseY);
 };
 
@@ -1127,7 +1122,7 @@ void ScreenSpaceOrbitDrawing::draw(bvg::Context& ctx, GizmoState& state) {
 }
 
 bool ScreenSpaceOrbitDrawing::mouseEvent(bvg::Context& ctx, GizmoState& state,
-                                         glm::mat4& model, bool isMouseDown,
+                                         Transform& transform, bool isMouseDown,
                                          float mouseX, float mouseY) {
     glm::vec2 centerS = worldToScreenSpace(ctx, center, viewproj);
     glm::vec2 mouse = glm::vec2(mouseX, mouseY);
@@ -1138,12 +1133,10 @@ bool ScreenSpaceOrbitDrawing::mouseEvent(bvg::Context& ctx, GizmoState& state,
     float angle = state.angle + relativeAngle;
     
     if(state.selectedControl == Control::SSOrbit) {
-        glm::vec3 viewDir = center - eye;
-        model =
-            glm::translate(state.translation) *
-            glm::rotate(relativeAngle, viewDir) *
-            glm::translate(-state.translation) *
-            model;
+        glm::vec3 viewDir = glm::normalize(center - eye);
+        transform.rotation =
+            glm::angleAxis(relativeAngle, viewDir) *
+            transform.rotation;
         state.angle = angle;
     }
     
@@ -1360,15 +1353,13 @@ void drawGizmosNew(bvg::Context& ctx,  GizmoState& state, GizmoTool tool,
 };
 
 void drawGizmos(bvg::Context& ctx,  GizmoState& state, GizmoTool tool,
-                GizmoProperties& props,
-                glm::mat4 viewproj, glm::mat4& model,
-                glm::vec3 eye, glm::vec3 target, glm::vec3 up,
+                GizmoProperties& props, Transform& transform,
+                glm::mat4 viewproj, glm::vec3 eye, glm::vec3 target, glm::vec3 up,
                 bool isMouseDown, float mouseX, float mouseY)
 {
-    glm::vec3 skew;
-    glm::vec4 perspective;
-    glm::decompose(model, state.scale, state.rotation, state.translation, skew, perspective);
-    
+    state.translation = transform.translation;
+    state.rotation = transform.rotation;
+    state.scale = transform.scale;
     glm::mat4 rotationMat = glm::toMat4(state.rotation);
     
     float gizmoScale = 0.4f;
@@ -1545,7 +1536,7 @@ void drawGizmos(bvg::Context& ctx,  GizmoState& state, GizmoTool tool,
     // From nearest to farest
     for(int i = drawings.size() - 1; i >= 0; i--) {
         Drawing* drawing = drawings.at(i).drawing;
-        if(drawing->mouseEvent(ctx, state, model, isMouseDown, mouseX, mouseY)) {
+        if(drawing->mouseEvent(ctx, state, transform, isMouseDown, mouseX, mouseY)) {
             state.isMouseOverControl = true;
             break;
         }
